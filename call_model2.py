@@ -112,7 +112,7 @@ prophet_columns = [col for col in forecast_df.columns if not col.endswith(
     "upper") and not col.endswith("lower")]
 events_numeric = forecast_df[prophet_columns].filter(
     like="events_").sum(axis=1)
-forecast_df = forecast_df[['ds', 'trend', 'yearly', 'holidays']]
+forecast_df = forecast_df[['ds', 'trend', 'yearly', 'holidays','yhat']]
 forecast_df.rename(
     columns={'ds': 'date', 'yearly': 'season', 'holidays': 'holiday'}, inplace=True)
 forecast_df["events"] = (events_numeric - np.min(events_numeric)).values
@@ -121,6 +121,19 @@ forecast_df["newsletter"] = data["newsletter"].mean()
 for col in media_channels:
     if col not in forecast_df.columns:
         forecast_df[col] = 10000
+# --- PLOT PROPHET FORECAST ---
+plt.figure(figsize=(12, 6))
+plt.plot(dates, data['revenue'], label='Historical Revenue', marker='o')
+plt.plot(forecast_df['date'], forecast_df['yhat'], label='Prophet Forecast', linestyle='--', marker='x')
+plt.xlabel('Date')
+plt.ylabel('Revenue')
+plt.title('Historical vs Prophet Forecasted Revenue')
+plt.legend()
+plt.grid(True)
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+# ------------------------------
 
 forecast_adstock = pd.DataFrame(
     final_model.named_steps['adstock'].transform(
@@ -157,9 +170,8 @@ saturated_data = pd.DataFrame(
 
 model_features = X.columns
 optimization_percentage = 0.2
-budget_obj = BudgetOptimization(saturated_data, media_channels, model_features, prophet)
-channel_spend_dist = budget_obj.historical_response(optimization_period)
-# pdb.set_trace()
+budget_obj = BudgetOptimization(data,saturated_data, media_channels, model_features, prophet)
+channel_spend_dist = budget_obj.historical_response(2*optimization_period)
 media_channel_average_spend = np.array([channel_spend_dist])
 
 hist_response = budget_obj.hist_pattern_allocation(
@@ -183,19 +195,23 @@ boundaries = optimize.Bounds(lb=lower_bound, ub=upper_bound)
 # print(boundaries.ub)
 # print(f"total budget: {np.sum(media_channel_average_spend)}")
 
-
+# pdb.set_trace()
 media_coefficients = [best_trial.params[f"coef_{channel}"] for channel in media_channels]
 media_hill_slopes = [best_trial.params[f"hill_slope_{channel}"] for channel in media_channels]
 media_hill_half_saturations = [best_trial.params[f"hill_half_saturation_{channel}"] for channel in media_channels]
 # pdb.set_trace()
-
+print(hist_response)
+# pdb.set_trace()
 optimized_media_spend = budget_obj.optimize_budget(
     hist_response,  # Use adjusted allocation as baseline
     media_coefficients,  # Use media coefficients from best_trial
     media_hill_slopes,  # Use hill slopes from best_trial
     media_hill_half_saturations,  # Use half-saturation values from best_trial
     media_min_max_ranges,
-    additional_inputs
+    additional_inputs,
+    delayed_channels=delay_control,
+    model=final_model,
+    optimisation_period=optimization_period
 )
 
 # Create the result object
@@ -340,5 +356,5 @@ for bar in bars2:
     height = bar.get_height()
     ax.text(bar.get_x() + bar.get_width() / 2, height, f'{height:.2f}', va='bottom', ha='center', color='green')
 
-# plt.tight_layout()
-# plt.show()
+plt.tight_layout()
+plt.show()

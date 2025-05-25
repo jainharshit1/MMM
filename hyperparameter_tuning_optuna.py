@@ -3,11 +3,13 @@ import optuna
 import pandas as pd
 import numpy as np
 from sklearn import linear_model
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import root_mean_squared_error
 from sklearn.model_selection import TimeSeriesSplit
 from functools import partial
 from carry_over import AdstockGeometric, AdstockWeibull
 from saturation import HillSaturation, ExponentialSaturation
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 class OptunaTuning:
     def __init__(self, X, y, delayed_channels, control_variables):
@@ -31,7 +33,7 @@ class OptunaTuning:
             carryover_model_name = trial.suggest_categorical(f"carryover_model_{feature}", ["AdstockGeometric", "AdstockWeibull"])
             carryover_models[feature] = carryover_model_name
 
-            saturation_model_name = trial.suggest_categorical(f"saturation_model_{feature}", ["HillSaturation", "ExponentialSaturation"])
+            saturation_model_name = trial.suggest_categorical(f"saturation_model_{feature}", ["HillSaturation"])
             saturation_models[feature] = saturation_model_name
 
             if carryover_model_name == 'AdstockGeometric':
@@ -52,15 +54,15 @@ class OptunaTuning:
                 exp_a = trial.suggest_float(f"a_{feature}", 0.01, 1.0)
                 saturation_params[feature] = exp_a
             
-            hill_slope_param = f"{feature}_hill_slope"
-            min_, max_ = hill_slopes_params[hill_slope_param]
-            hill_slope = trial.suggest_float(f"hill_slope_{feature}", min_, max_)
-            hill_slopes[feature] = hill_slope
+            # hill_slope_param = f"{feature}_hill_slope"
+            # min_, max_ = hill_slopes_params[hill_slope_param]
+            # hill_slope = trial.suggest_float(f"hill_slope_{feature}", min_, max_)
+            # hill_slopes[feature] = hill_slope
 
-            hill_half_saturation_param = f"{feature}_hill_half_saturation"
-            min_, max_ = hill_half_saturations_params[hill_half_saturation_param]
-            hill_half_saturation = trial.suggest_float(f"hill_half_saturation_{feature}", min_, max_)
-            hill_half_saturations[feature] = hill_half_saturation
+            # hill_half_saturation_param = f"{feature}_hill_half_saturation"
+            # min_, max_ = hill_half_saturations_params[hill_half_saturation_param]
+            # hill_half_saturation = trial.suggest_float(f"hill_half_saturation_{feature}", min_, max_)
+            # hill_half_saturations[feature] = hill_half_saturation
 
             # Adstock transformation
             x_feature = data[feature].values.reshape(-1, 1)
@@ -72,9 +74,9 @@ class OptunaTuning:
 
             # Hill saturation transformation
             if saturation_model_name == 'HillSaturation':
-                temp_hill_saturation = HillSaturation(alpha=hill_slope, gamma=hill_half_saturation).fit_transform(temp_adstock)
+                temp_hill_saturation = HillSaturation(alpha=hill_alpha, gamma=hill_gamma).fit_transform(temp_adstock)
             elif saturation_model_name == 'ExponentialSaturation':
-                temp_hill_saturation = ExponentialSaturation(a=hill_slope).fit_transform(temp_adstock)
+                temp_hill_saturation = ExponentialSaturation(a=exp_a).fit_transform(temp_adstock)
 
             data_temp[feature] = temp_hill_saturation
 
@@ -82,12 +84,22 @@ class OptunaTuning:
         # Ridge parameters
         if regression_model_name == "Ridge":
             ridge_alpha = trial.suggest_float("alpha_ridge", 0.01, 10000)
-            regression_model = linear_model.Ridge(alpha=ridge_alpha, random_state=0)
+            base_model = linear_model.Ridge(alpha=ridge_alpha, random_state=0,positive=True)
+             # wrap in a small pipeline that scales your inputs
+            regression_model = Pipeline([
+                 ("scaler", StandardScaler()),
+                 ("regression_model_name",   base_model)
+            ])
+
             params = {"alpha_ridge": ridge_alpha}
         elif regression_model_name == "ElasticNet":
             alpha_enet = trial.suggest_float("alpha_enet", 0.01, 10000)
             l1_ratio_enet = trial.suggest_float("l1_ratio_enet", 0.0, 1.0)
-            regression_model = linear_model.ElasticNet(alpha=alpha_enet, l1_ratio=l1_ratio_enet, random_state=0)
+            base_model = linear_model.ElasticNet(alpha=alpha_enet, l1_ratio=l1_ratio_enet, random_state=0,positive=True)
+            regression_model = Pipeline([
+                ("scaler", StandardScaler()),
+                ("regression_model_name",base_model)
+            ])
             params = {"alpha_enet": alpha_enet, "l1_ratio_enet": l1_ratio_enet}
         scores = []
 
@@ -102,12 +114,13 @@ class OptunaTuning:
             regression_model.fit(x_train, y_train)
             prediction = regression_model.predict(x_test)
 
-            rmse = mean_squared_error(y_true=y_test, y_pred=prediction, squared=False)
+            rmse = root_mean_squared_error(y_true=y_test, y_pred=prediction)
             scores.append(rmse)
         
-        
+        # pdb.set_trace()
+        print(regression_model.named_steps)
         for i, feature in enumerate(features):
-            params[f"coef_{feature}"] = regression_model.coef_[i]
+            params[f"coef_{feature}"] = regression_model.named_steps["regression_model_name"].coef_[i]
 
         trial.set_user_attr("scores", scores)
         trial.set_user_attr("params", params)
@@ -190,7 +203,7 @@ class OptunaTuning:
             hill_half_saturation = hill_half_saturations_params[feature]
             print(f"Applying {saturation_model_name} saturation transformation on {feature} with slope {hill_slope:0.3} and half saturation {hill_half_saturation:0.3}")
 
-            # Hill saturation transformation
+            # saturation transformation
             if saturation_model_name == 'HillSaturation':
                 hill_slope, hill_half_saturation = saturation_params[feature]
                 temp_hill_saturation = HillSaturation(alpha=hill_slope, gamma=hill_half_saturation).fit_transform(temp_adstock)

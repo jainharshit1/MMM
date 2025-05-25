@@ -73,16 +73,15 @@ class Model:
         # Create the regression model with the best parameters
         if regression_model_name == 'Ridge':
             regression_model = Ridge(alpha=best_params.get('alpha_ridge', 1.0),
-                                     positive=best_params.get('positive_ridge', False))
+                                     positive=best_params.get('positive_ridge', True))
         elif regression_model_name == 'ElasticNet':
             regression_model = ElasticNet(alpha=best_params.get('alpha_enet', 1.0),
                                           l1_ratio=best_params.get('l1_ratio_enet', 0.5),
-                                          positive=best_params.get('positive_enet', False))
+                                          positive=best_params.get('positive_enet', True))
 
         # Construct the final pipeline
         final_model = Pipeline([
             ('adstock', adstock),
-            # ('regression', TransformedTargetRegressor(regressor=regression_model, transformer=AutoTargetScaler()))
             ('regression', TransformedTargetRegressor(regressor=regression_model, transformer=StandardScaler()))
 
         ])

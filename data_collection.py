@@ -6,9 +6,9 @@ from prophet import Prophet
 import numpy as np
 class DataCollection:
     def data_preparation(self):
-        data = pd.read_csv(r"harshit\data\robyn_sample.csv",parse_dates = ["DATE"])
+        data = pd.read_csv(r"data\robyn_sample.csv",parse_dates = ["DATE"])
         data.columns = [c.lower() if c in ["DATE"] else c for c in data.columns]
-        holidays = pd.read_csv(r"harshit\data\robyn_holidays.csv",parse_dates = ["ds"])
+        holidays = pd.read_csv(r"data\robyn_holidays.csv",parse_dates = ["ds"])
         holidays["ds"] = pd.to_datetime(holidays["ds"], format="%d-%m-%Y")
         holidays["begin_week"] = holidays["ds"].dt.to_period('W').dt.start_time
         #combine same week holidays into one holiday
@@ -34,6 +34,6 @@ class DataCollection:
         final_data["holiday"] = prophet_predict["holidays"]
         final_data["events"] = (events_numeric - np.min(events_numeric)).values
         # final_data = pd.read_csv("data/data.csv", parse_dates = ["date"])
-        final_data.to_csv("harshit\data\data.csv", index=False)
+        final_data.to_csv("data\data.csv", index=False)
 
         return final_data, prophet
