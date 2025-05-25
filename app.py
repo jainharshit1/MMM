@@ -27,13 +27,13 @@ st.markdown("""
 <style>
     .main-header {
         font-size: 2.5rem;
-        color: #7FDBFF;
+        color: #7FDBFF !important;
         text-align: center;
         margin-bottom: 1rem;
     }
     .section-header {
         font-size: 1.8rem;
-        color: #7FDBFF;
+        color: #7FDBFF !important;
         margin-top: 1.5rem;
         margin-bottom: 1rem;
     }
