@@ -4,11 +4,23 @@
 import pandas as pd
 from prophet import Prophet
 import numpy as np
+import os
+# Add this function near the top of your file
+def get_data_path(relative_path):
+    """Get absolute path to data file, works in both local and cloud environments"""
+    # Get the directory where the current file is located
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    # Build the path using os.path.join which handles platform-specific separators
+    return os.path.join(base_dir, relative_path)
+
+# Then whenever loading the data file, use:
+# Instead of: 'data\robyn_sample.csv'
+# Use: get_data_path('data/robyn_sample.csv')  # Note the forward slashes
 class DataCollection:
     def data_preparation(self):
-        data = pd.read_csv(r"data\robyn_sample.csv",parse_dates = ["DATE"])
+        data = pd.read_csv(get_data_path('data/robyn_sample.csv'),parse_dates = ["DATE"])
         data.columns = [c.lower() if c in ["DATE"] else c for c in data.columns]
-        holidays = pd.read_csv(r"data\robyn_holidays.csv",parse_dates = ["ds"])
+        holidays = pd.read_csv(get_data_path('data/robyn_holidays.csv'),parse_dates = ["ds"])
         holidays["ds"] = pd.to_datetime(holidays["ds"], format="%d-%m-%Y")
         holidays["begin_week"] = holidays["ds"].dt.to_period('W').dt.start_time
         #combine same week holidays into one holiday
@@ -34,6 +46,6 @@ class DataCollection:
         final_data["holiday"] = prophet_predict["holidays"]
         final_data["events"] = (events_numeric - np.min(events_numeric)).values
         # final_data = pd.read_csv("data/data.csv", parse_dates = ["date"])
-        final_data.to_csv("data\data.csv", index=False)
+        final_data.to_csv(get_data_path('data/data.csv'), index=False)
 
         return final_data, prophet
